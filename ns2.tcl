@@ -7,7 +7,9 @@ if {$argc != 2} {
 set flavor [lindex $argv 0]
 set case [lindex $argv 1]
 global queue_mech, delay, null3
-
+set f0 [open out0.tr w]
+set f1 [open out1.tr w]
+set f2 [open out2.tr w]
 set delay 0
 
 # Set simulation parameters
@@ -19,7 +21,7 @@ switch $case {
 }
 
 switch $flavor {
-	"DropTail" {set queue_mech "DropTail"}
+	"DROPTAIL" {set queue_mech "DropTail"}
 	"RED" {set queue_mech "RED"}
 	default {puts "Invalid option" 
 		exit}
@@ -32,34 +34,46 @@ set cnt 0;
 set tput1 0;
 set tput2 0;
 set tput3 0;
-
+proc init {} {
+global case null1 null2 null3
+$null1 set bytes_ 0
+$null2 set bytes_ 0
+    if {$case == 2} {
+	$null3 set bytes_ 0
+ 	}
+}
 # Print throughputs at finish
 proc finish {} {
     global case ns nf file tput1 tput2 tput3 cnt
     if {$case == 2} {
-    puts [format "src1: %.6f Mbps; src2: %.6f Mbps; Ratio: %.2f; src3: %.6f Mbps" [expr $tput1/$cnt] [expr $tput2/$cnt] [expr $tput1/$tput2] [expr $tput3/$cnt]]
+    puts [format "src1: %.6f Mbps; src2: %.6f Mbps; src3: %.6f Mbps" [expr $tput1/$cnt] [expr $tput2/$cnt] [expr $tput3/$cnt]]
+    exec xgraph out0.tr out1.tr out2.tr -geometry 800x400 &
     exit 0
     }	
-    puts [format "src1: %.6f Mbps; src2: %.6f Mbps; Ratio: %.2f" [expr $tput1/$cnt] [expr $tput2/$cnt] [expr $tput1/$tput2]]
+    puts [format "src1: %.6f Mbps; src2: %.6f Mbps; " [expr $tput1/$cnt] [expr $tput2/$cnt] ]
+    exec xgraph out0.tr out1.tr out2.tr -geometry 800x400 &
     exit 0
 }
 
 # Reccursive procedure to calculate throughput at regular intervals
 proc record {} {
-    global null1 null2 null3 f1 f2 tput1 tput2 tput3 cnt case
+    global null1 null2 null3 f0 f1 f2 tput1 tput2 tput3 cnt case
     set ns [Simulator instance]
-    set time 0.5
+    set time 0.9
     set bw1 [$null1 set bytes_]
     set bw2 [$null2 set bytes_]
     set now [$ns now]
     set tput1 [expr $tput1+($bw1/$time*8/1000000)]
     set tput2 [expr $tput2+($bw2/$time*8/1000000)]
+        puts $f0 "$now [expr $bw1/$time*8/1000000]"
+        puts $f1 "$now [expr $bw2/$time*8/1000000]"
     set cnt [expr $cnt+1]
     $null1 set bytes_ 0
     $null2 set bytes_ 0
     if {$case == 2} {
     	set bw3 [$null3 set bytes_]
     	set tput3 [expr $tput3+($bw3/$time*8/1000000)]
+        puts $f2 "$now [expr $bw3/$time*8/1000000]"
     	$null3 set bytes_ 0
     }
     $ns at [expr $now+$time] "record"
@@ -102,7 +116,7 @@ if {$case == 2} {
 	$cbr attach-agent $udp
 	$cbr set type_ CBR
 	$cbr set packet_size_ 100
-	$cbr set rate_ 1mb
+	$cbr set rate_ 1Mb
 	$ns duplex-link $H3 $r1 10Mb 1ms $queue_mech
 	$ns duplex-link $H5 $r2 10Mb 1ms $queue_mech
 }
@@ -123,6 +137,7 @@ $ns connect $tcp1 $null1
 $ns connect $tcp2 $null2
 
 # Start measuring throughput after 100 seconds
+$ns at 30.0 "init"
 $ns at 30.0 "record"
 
 $ns at 0.0 "$ftp1 start"
@@ -139,3 +154,4 @@ $ns at 180.0 "$cbr stop"
 $ns at 180.0 "finish"
 
 $ns run
+
